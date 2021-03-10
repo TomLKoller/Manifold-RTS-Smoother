@@ -43,13 +43,35 @@ namespace adekf
             old_sigmas.push_back(this->sigma);
             smoothed_sigmas.push_back(this->sigma);
         }
+        template <typename Head, typename... Tail>
+        std::tuple<Tail...> tuple_tail(const std::tuple<Head, Tail...> &t)
+        {
+            return apply([](auto head, auto... tail) {
+                return std::make_tuple(tail...);
+            },
+                         t);
+        }
+
+        template <typename DynamicModel, typename tstate, typename NoiseVector, typename... Controls, typename... ExpandedControls>
+        void applyDynamicModel(DynamicModel dynamicModel, tstate &input, const NoiseVector &noise, const std::tuple<Controls...> &controls, const ExpandedControls& ...  expanded_controls)
+        {
+             if constexpr(std::tuple_size<std::tuple<Controls ...>>::value > 0)
+            {
+                applyDynamicModel(dynamicModel, input, noise, tuple_tail(controls), expanded_controls..., std::get<0>(controls));
+            }
+            else
+            {
+                dynamicModel(input, noise, expanded_controls...);
+            }
+        }
+
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        Covariance getNonAdditiveDynamicNoise(const State &smoothed, DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const Controls &...u)
+        Covariance getNonAdditiveDynamicNoise(const State &smoothed, DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const std::tuple<Controls...> &controls)
         {
             auto derivator = adekf::getDerivator<DOF + NoiseDim>();
             auto input = eval(smoothed + derivator.template head<DOF>());
             //Todo u vernünftig machen
-            dynamicModel(input, derivator.template tail<NoiseDim>(), u...);
+            applyDynamicModel(dynamicModel, input, derivator.template tail<NoiseDim>(), controls);
             auto result = (input - smoothed);
             //std::cout << result << std::endl;
             Eigen::Matrix<double, DOF, DOF + NoiseDim> F(DOF, DOF + NoiseDim);
@@ -63,7 +85,7 @@ namespace adekf
         }
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        void smoothIntervalWithNonAdditiveNoise(size_t steps, int start, DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const Controls &...u)
+        void smoothIntervalWithNonAdditiveNoise(size_t steps, int start, DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)
         {
             if (start < 0)
             {
@@ -71,20 +93,22 @@ namespace adekf
             }
             assert(start - steps >= 0 && "Can not smooth more estimates than available");
             assert(start < old_mus.size() - 1 && "Can not smooth a state which belongs to future");
+            assert(all_controls.size() == old_mus.size() - 1 && "Requires all control inputs for the dynamic model.");
             for (size_t i = start; i >= old_mus.size() - steps - 1; i--)
             {
+                std::cout << "At iteration: " << i << std::endl;
                 State smoothed = old_mus[i];
                 Eigen::Matrix<double, DOF, DOF> J1(DOF, DOF), J2(DOF, DOF);
                 Covariance DynamicCov, SmootherGain, PredictedCov;
+                auto controls = all_controls[i];
+                DynamicCov = getNonAdditiveDynamicNoise(smoothed, dynamicModel, Q, controls);
 
-                DynamicCov = getNonAdditiveDynamicNoise(smoothed, dynamicModel, Q, u...);
-
-                auto derivator1 = adekf::getDerivator<DOF>();
-                auto input1 = eval(smoothed + derivator1);
+                auto derivator = adekf::getDerivator<DOF>();
+                auto input = eval(smoothed + derivator);
                 //Todo  u vernünftig machen
-                dynamicModel(input1, Eigen::Matrix<double, NoiseDim, 1>::Zero(), u...);
-                dynamicModel(smoothed, Eigen::Matrix<double, NoiseDim, 1>::Zero(), u...);
-                auto result1 = eval(input1 - smoothed);
+                applyDynamicModel(dynamicModel,input,Eigen::Matrix<double, NoiseDim, 1>::Zero(), controls);
+                applyDynamicModel(dynamicModel,smoothed,Eigen::Matrix<double, NoiseDim, 1>::Zero(), controls);
+                auto result1 = eval(input - smoothed);
                 Eigen::Matrix<double, DOF, 1> diff1;
 
                 for (size_t j = 0; j < DOF; ++j)
@@ -96,7 +120,7 @@ namespace adekf
                 PredictedCov = J1 * old_sigmas[i] * J1.transpose() + DynamicCov;
                 SmootherGain = old_sigmas[i] * J1.transpose() * PredictedCov.inverse();
                 smoothed_mus[i] = old_mus[i] + (SmootherGain * (smoothed_mus[i + 1] - smoothed));
-                auto result2 = eval(input1 - smoothed_mus[i]);
+                auto result2 = eval(input - smoothed_mus[i]);
 
                 for (size_t j = 0; j < DOF; ++j)
                 {
@@ -108,9 +132,9 @@ namespace adekf
         }
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        void smoothAllWithNonAdditiveNoise(DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const Controls &...u)
+        void smoothAllWithNonAdditiveNoise(DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)
         {
-            smoothIntervalWithNonAdditiveNoise(old_mus.size() - 2, -1, dynamicModel, Q, u...);
+            smoothIntervalWithNonAdditiveNoise(old_mus.size() - 2, -1, dynamicModel, Q, all_controls);
         }
     };
 
