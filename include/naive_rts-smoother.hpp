@@ -19,7 +19,7 @@ namespace adekf
      * @tparam Filter The Filter to be used for estimation
      */
     template <typename State>
-    class RTS_Smoother : public ADEKF<State>
+    class Naive_RTS_Smoother : public ADEKF<State>
     {
        
 
@@ -30,8 +30,8 @@ namespace adekf
         aligned_vector<State> old_mus,smoothed_mus, predicted_mus;
         aligned_vector<Covariance> old_sigmas,smoothed_sigmas,predicted_sigmas;
 
-        RTS_Smoother(const State &_mu, const Covariance &_sigma) : ADEKF<State>(_mu, _sigma) { storeEstimation(); storePredictedEstimation(); }
-        RTS_Smoother(const ADEKF<State> &filter) : ADEKF<State>(filter) { storeEstimation();storePredictedEstimation(); }
+        Naive_RTS_Smoother(const State &_mu, const Covariance &_sigma) : ADEKF<State>(_mu, _sigma) { storeEstimation(); storePredictedEstimation(); }
+        Naive_RTS_Smoother(const ADEKF<State> &filter) : ADEKF<State>(filter) { storeEstimation();storePredictedEstimation(); }
         /**
          * Stores the current mean and covariance of the filter 
          */
@@ -99,13 +99,12 @@ namespace adekf
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
         void smoothSingleStep(size_t k, DynamicModel & dynamicModel, const SquareMatrixType<double, NoiseDim> &Q,const std::tuple<Controls ...> & controls,const State & smoothed_mu_kplus,const Covariance & smoothed_sigma_kplus){
-            State smoothed = old_mus[k];
                 MatrixType<double, DOF, DOF> Fk(DOF, DOF);
                 Covariance SmootherGain;
                 
 
                 auto derivator = adekf::getDerivator<DOF>();
-                auto input = eval(smoothed + derivator);
+                auto input = eval(old_mus[k] + derivator);
                 applyDynamicModel(dynamicModel,input,Eigen::Matrix<double, NoiseDim, 1>::Zero(), controls);
                 auto result1 = eval(input - predicted_mus[k+1]);
                 Eigen::Matrix<double, DOF, 1> diff1;
@@ -118,46 +117,7 @@ namespace adekf
 
                 SmootherGain = old_sigmas[k] * Fk.transpose() * (predicted_sigmas[k+1].inverse());
                 smoothed_mus[k] = old_mus[k] + (SmootherGain * (smoothed_mu_kplus- predicted_mus[k+1]));
-                //Calc Covariance
-                /*SquareMatrixType<double,2*DOF> measCovariance(2*DOF,2*DOF);
-                Covariance DynamicCovariance=getNonAdditiveDynamicNoise(old_mus[k],dynamicModel,Q,controls);
-                measCovariance.template block<DOF,DOF>(0,0)=old_sigmas[k];
-                measCovariance.template block<DOF,DOF>(0,DOF)=old_sigmas[k]*J1.transpose();
-                measCovariance.template block<DOF,DOF>(DOF,0)=J1*old_sigmas[k].transpose();
-                measCovariance.template block<DOF,DOF>(DOF,DOF)=smoothed_sigma_kplus+DynamicCovariance;
-                Eigen::Matrix<ceres::Jet<double,DOF>,2*DOF,1> result2;
-                result2.template segment<DOF>(0) = eval(smoothed_mus[k]+derivator - old_mus[k]);
-                input=smoothed_mus[k]+derivator;
-                applyDynamicModel(dynamicModel,input,Eigen::Matrix<double, NoiseDim, 1>::Zero(), controls);
-                result2.template segment<DOF>(DOF) = eval(input - smoothed_mu_kplus);
-
-
-                MatrixType<double, 2*DOF,DOF> J2(2*DOF,DOF);
-                for (size_t j = 0; j < 2*DOF; ++j)
-                {
-                    J2.row(j) = result2(j).v;
-                }
-                std::cout << measCovariance.determinant() << std::endl;
-                smoothed_sigmas[k]=(J2.transpose()*measCovariance.inverse()*J2).inverse();*/
-
-
-                Covariance Jk(DOF,DOF);
-                auto result2=eval(old_mus[k]+derivator-smoothed_mus[k]);
-                for (size_t j = 0; j < DOF; ++j)
-                {
-                    Jk.row(j) = result2(j).v;
-                }
-
-                Covariance Dk(DOF,DOF);
-                result2=eval((old_mus[k] + (SmootherGain * (smoothed_mu_kplus +derivator- predicted_mus[k+1])))-smoothed_mus[k]);
-                for (size_t j = 0; j < DOF; ++j)
-                {
-                    Dk.row(j) = result2(j).v;
-                }
-                //std::cout << (SmootherGain-D).norm() << std::endl;
-                //smoothed_sigmas[k] = J2 * (old_sigmas[k] + SmootherGain * (smoothed_sigma_kplus - predicted_sigmas[k+1]) * SmootherGain.transpose()) * J2.transpose();
-                smoothed_sigmas[k] = Jk*(old_sigmas[k] - SmootherGain * predicted_sigmas[k+1] * SmootherGain.transpose()+Dk*smoothed_sigma_kplus*Dk.transpose())*Jk.transpose();
-                 //assert(isPositiveDefinite(smoothed_sigmas[k]));
+                smoothed_sigmas[k] = (old_sigmas[k] + SmootherGain *(smoothed_sigma_kplus- predicted_sigmas[k+1]) * SmootherGain.transpose());
         }
 
 
@@ -187,13 +147,13 @@ namespace adekf
     };
 
     /**
-     * General Deduction Template for the RTS_Smoother based on StateRetriever.
-     * This is needed so you can type RTS_Smoother smoother(Filter{...}) without template arguments
+     * General Deduction Template for the Naive_RTS_Smoother based on StateRetriever.
+     * This is needed so you can type Naive_RTS_Smoother smoother(Filter{...}) without template arguments
      */
     /*template <typename State>
-    RTS_Smoother(ADEKF<State> &&) -> RTS_Smoother<State>;
+    Naive_RTS_Smoother(ADEKF<State> &&) -> Naive_RTS_Smoother<State>;
     template <typename State>
-    RTS_Smoother(ADEKF<State> ) -> RTS_Smoother<State>;
+    Naive_RTS_Smoother(ADEKF<State> ) -> Naive_RTS_Smoother<State>;
 */
 
 } // namespace adekf
