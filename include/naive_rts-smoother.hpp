@@ -118,6 +118,7 @@ namespace adekf
                 SmootherGain = old_sigmas[k] * Fk.transpose() * (predicted_sigmas[k+1].inverse());
                 smoothed_mus[k] = old_mus[k] + (SmootherGain * (smoothed_mu_kplus- predicted_mus[k+1]));
                 smoothed_sigmas[k] = (old_sigmas[k] + SmootherGain *(smoothed_sigma_kplus- predicted_sigmas[k+1]) * SmootherGain.transpose());
+                assurePositiveDefinite(smoothed_sigmas[k]);
         }
 
 
@@ -133,7 +134,7 @@ namespace adekf
             assert(all_controls.size() == old_mus.size() - 1 && "Requires all control inputs for the dynamic model.");
             for (size_t k = start; k >= old_mus.size() - steps - 1; k--)
             {
-                std::cout << "At iteration: " << k << std::endl;
+                //std::cout << "At iteration: " << k << std::endl;
                 smoothSingleStep(k,dynamicModel,Q,all_controls[k],smoothed_mus[k+1], smoothed_sigmas[k+1]);
                 
             }

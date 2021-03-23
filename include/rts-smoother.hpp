@@ -142,22 +142,30 @@ namespace adekf
 
 
                 Covariance Jk(DOF,DOF);
-                auto result2=eval(old_mus[k]+derivator-smoothed_mus[k]);
+                //derived
+                auto result2=eval(old_mus[k]+(SmootherGain * (smoothed_mu_kplus- predicted_mus[k+1])+derivator)-smoothed_mus[k]);
+                //works better
+                //result2=eval(smoothed_mus[k]+derivator-old_mus[k]);
                 for (size_t j = 0; j < DOF; ++j)
                 {
                     Jk.row(j) = result2(j).v;
                 }
-
+                //Jk=Jk.Identity(DOF,DOF);
                 Covariance Dk(DOF,DOF);
                 result2=eval((old_mus[k] + (SmootherGain * (smoothed_mu_kplus +derivator- predicted_mus[k+1])))-smoothed_mus[k]);
+                result2=eval((old_mus[k] + (SmootherGain * (smoothed_mu_kplus +derivator- predicted_mus[k+1])))-old_mus[k]);
                 for (size_t j = 0; j < DOF; ++j)
                 {
                     Dk.row(j) = result2(j).v;
                 }
+                //50.5971
                 //std::cout << (SmootherGain-D).norm() << std::endl;
                 //smoothed_sigmas[k] = J2 * (old_sigmas[k] + SmootherGain * (smoothed_sigma_kplus - predicted_sigmas[k+1]) * SmootherGain.transpose()) * J2.transpose();
                 smoothed_sigmas[k] = Jk*(old_sigmas[k] - SmootherGain * predicted_sigmas[k+1] * SmootherGain.transpose()+Dk*smoothed_sigma_kplus*Dk.transpose())*Jk.transpose();
+                //smoothed_sigmas[k] = Jk*(old_sigmas[k] - SmootherGain * predicted_sigmas[k+1] * SmootherGain.transpose())*Jk.transpose()+Dk*smoothed_sigma_kplus*Dk.transpose();
                  //assert(isPositiveDefinite(smoothed_sigmas[k]));
+                assurePositiveDefinite(smoothed_sigmas[k]);
+                //assert(isPositiveDefinite(smoothed_sigmas[k]));
         }
 
 
@@ -173,7 +181,7 @@ namespace adekf
             assert(all_controls.size() == old_mus.size() - 1 && "Requires all control inputs for the dynamic model.");
             for (size_t k = start; k >= old_mus.size() - steps - 1; k--)
             {
-                std::cout << "At iteration: " << k << std::endl;
+                //std::cout << "At iteration: " << k << std::endl;
                 smoothSingleStep(k,dynamicModel,Q,all_controls[k],smoothed_mus[k+1], smoothed_sigmas[k+1]);
                 
             }
