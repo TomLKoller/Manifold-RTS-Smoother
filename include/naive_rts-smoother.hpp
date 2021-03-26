@@ -25,6 +25,7 @@ namespace adekf
 
     public:
         using Covariance = typename ADEKF<State>::Covariance;
+        using ScalarType = typename ADEKF<State>::ScalarType;
         static constexpr size_t DOF = DOFOf<State>;
         static constexpr double weighted_mean_epsilon = 1e-8;
         aligned_vector<State> old_mus,smoothed_mus, predicted_mus;
@@ -71,7 +72,7 @@ namespace adekf
         }
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        Covariance getNonAdditiveDynamicNoise(const State &smoothed, DynamicModel dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const std::tuple<Controls...> &controls)
+        Covariance getNonAdditiveDynamicNoise(const State &smoothed, DynamicModel dynamicModel, const SquareMatrixType<double,NoiseDim> &Q, const std::tuple<Controls...> &controls)
         {
             auto derivator = adekf::getDerivator<DOF + NoiseDim>();
             auto input = eval(smoothed + derivator.template head<DOF>());
@@ -79,7 +80,7 @@ namespace adekf
             applyDynamicModel(dynamicModel, input, derivator.template tail<NoiseDim>(), controls);
             auto result = (input - smoothed);
             //std::cout << result << std::endl;
-            Eigen::Matrix<double, DOF, DOF + NoiseDim> F(DOF, DOF + NoiseDim);
+            MatrixType<double, DOF, DOF + NoiseDim> F(DOF, DOF + NoiseDim);
             //Eigen::Matrix<double,DOF,1> diff;
             for (size_t j = 0; j < DOF; ++j)
             {
@@ -98,16 +99,16 @@ namespace adekf
     }
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        void smoothSingleStep(size_t k, DynamicModel & dynamicModel, const SquareMatrixType<double, NoiseDim> &Q,const std::tuple<Controls ...> & controls,const State & smoothed_mu_kplus,const Covariance & smoothed_sigma_kplus){
-                MatrixType<double, DOF, DOF> Fk(DOF, DOF);
+        void smoothSingleStep(size_t k, DynamicModel & dynamicModel, const Eigen::Matrix<double,NoiseDim,NoiseDim> &Q,const std::tuple<Controls ...> & controls,const State & smoothed_mu_kplus,const Covariance & smoothed_sigma_kplus){
+                MatrixType<ScalarType,DOF, DOF> Fk(DOF, DOF);
                 Covariance SmootherGain;
                 
 
                 auto derivator = adekf::getDerivator<DOF>();
                 auto input = eval(old_mus[k] + derivator);
-                applyDynamicModel(dynamicModel,input,Eigen::Matrix<double, NoiseDim, 1>::Zero(), controls);
+                applyDynamicModel(dynamicModel,input,MatrixType<ScalarType,NoiseDim, 1>::Zero(), controls);
                 auto result1 = eval(input - predicted_mus[k+1]);
-                Eigen::Matrix<double, DOF, 1> diff1;
+                MatrixType<ScalarOf(this->mu),DOF, 1> diff1;
 
                 for (size_t j = 0; j < DOF; ++j)
                 {
@@ -123,7 +124,7 @@ namespace adekf
 
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        void smoothIntervalWithNonAdditiveNoise(size_t steps, int start, DynamicModel & dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)
+        void smoothIntervalWithNonAdditiveNoise(size_t steps, int start, DynamicModel & dynamicModel, const Eigen::Matrix<double,NoiseDim,NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)
         {
             if (start < 0)
             {
@@ -141,7 +142,7 @@ namespace adekf
         }
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
-        void smoothAllWithNonAdditiveNoise(DynamicModel & dynamicModel, const SquareMatrixType<double, NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)
+        void smoothAllWithNonAdditiveNoise(DynamicModel & dynamicModel, const Eigen::Matrix<double,NoiseDim,NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)
         {
             smoothIntervalWithNonAdditiveNoise(old_mus.size() - 2, -1, dynamicModel, Q, all_controls);
         }
