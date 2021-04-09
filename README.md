@@ -58,7 +58,7 @@ Two options are available for smoothing:
 
 Both require the dynamicModel function, the dynamic Noise and the stored controls values:
 ```c++
-smoother.smoothIntervalWithNonAdditiveNoise(dynamicModel,dynamic_noise,all_controls);
+smoother.smoothIntervalWithNonAdditiveNoise(steps, start, dynamicModel,dynamic_noise,all_controls);
 // or
 smoother.smoothAllWithNonAdditiveNoise(dynamicModel, dynamic_noise, all_controls);
 ```
