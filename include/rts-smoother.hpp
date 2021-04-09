@@ -110,20 +110,11 @@ namespace adekf
             auto delta = adekf::getDerivator<DOF>();
             auto input = eval(old_mus[k] + delta);
             applyDynamicModel(dynamicModel, input, MatrixType<ScalarType,NoiseDim, 1>::Zero(), controls);
+            
+            Covariance Fk=extractJacobi(input - predicted_mus[k+1]);
 
-            auto ref=old_mus[k]
-            do{
-
-            Covariance predicted_to_r=extractJacobi(predicted_mus[k+1]+delta - old_mus[k]);
-            Covariance predicted_in_r=predicted_to_r*predicted_sigmas[k+1]*predicted_to_r.transpose();
-            Covariance smoothedplus_to_r=extractJacobi(smoothed_mu_kplus+delta-old_mus[k]);
-            Covariance smoothed_in_r=smoothedplus_to_r*smoothed_sigma_kplus*smoothedplus_to_r.transpose();
-
-            Covariance Fk=extractJacobi(input -old_mus[k]);
-
-
-            Covariance SmootherGain = old_sigmas[k] * Fk.transpose() * predicted_in_r.inverse();
-            typename State::template DeltaType<double> smoother_innovation=SmootherGain * ((smoothed_mu_kplus-old_mus[k])-(predicted_mus[k + 1]-old_mus[k]));
+            Covariance SmootherGain = old_sigmas[k] * Fk.transpose() * predicted_sigmas[k+1].inverse();
+            typename State::template DeltaType<double> smoother_innovation=SmootherGain * (smoothed_mu_kplus-predicted_mus[k + 1]);
             smoothed_mus[k] = old_mus[k] + smoother_innovation;
 
           
@@ -131,17 +122,8 @@ namespace adekf
              Covariance Jk=extractJacobi(result2);
            
 
-            //Covariance Bk=extractJacobi(smoothed_mu_kplus+delta-predicted_mus[k+1]);
-            /*smoothed_sigmas[k] = Jk * (old_sigmas[k] + SmootherGain * (smoothed_in_r-predicted_in_r) * SmootherGain.transpose())*Jk.transpose();
-            assurePositiveDefinite(smoothed_sigmas[k]);*/
-            Fk=extractJacobi(input-smoothed_mus[k]);
-            Covariance old_to_r=extractJacobi(old_mus[k]+delta-smoothed_mus[k]);
-            Covariance old_in_r=old_to_r*old_sigmas[k]*old_to_r.transpose();
-            predicted_to_r=extractJacobi(predicted_mus[k+1]+delta - smoothed_mus[k]);
-            predicted_in_r=predicted_to_r*predicted_sigmas[k+1]*predicted_to_r.transpose();
-            smoothed_in_r=smoothed_sigma_kplus;
-            SmootherGain = old_in_r * Fk.transpose() * predicted_in_r.inverse();
-            smoothed_sigmas[k] = old_in_r + SmootherGain * (smoothed_in_r-predicted_in_r) * SmootherGain.transpose();
+            Covariance Bk=extractJacobi(smoothed_mu_kplus+delta-predicted_mus[k+1]);
+            smoothed_sigmas[k] = Jk * (old_sigmas[k] + SmootherGain * (Bk*smoothed_sigma_kplus*Bk.transpose()-predicted_sigmas[k+1]) * SmootherGain.transpose())*Jk.transpose();
             assurePositiveDefinite(smoothed_sigmas[k]);
         }
 
