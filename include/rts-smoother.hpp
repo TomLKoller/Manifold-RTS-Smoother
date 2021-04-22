@@ -110,7 +110,7 @@ namespace adekf
             auto delta = adekf::getDerivator<DOF>();
             auto input = eval(old_mus[k] + delta);
             applyDynamicModel(dynamicModel, input, MatrixType<ScalarType,NoiseDim, 1>::Zero(), controls);
-            
+           
             Covariance Fk=extractJacobi(input - predicted_mus[k+1]);
 
             Covariance SmootherGain = old_sigmas[k] * Fk.transpose() * predicted_sigmas[k+1].inverse();
@@ -118,11 +118,10 @@ namespace adekf
             smoothed_mus[k] = old_mus[k] + smoother_innovation;
 
           
-            auto result2 = eval(old_mus[k] + (smoother_innovation+delta) - smoothed_mus[k]);
-             Covariance Jk=extractJacobi(result2);
+            Covariance Jk=transformReferenceJacobian(old_mus[k],smoothed_mus[k],smoother_innovation);
            
 
-            Covariance Bk=extractJacobi(smoothed_mu_kplus+delta-predicted_mus[k+1]);
+            Covariance Bk=transformReferenceJacobian(smoothed_mu_kplus,predicted_mus[k+1]); 
             smoothed_sigmas[k] = Jk * (old_sigmas[k] + SmootherGain * (Bk*smoothed_sigma_kplus*Bk.transpose()-predicted_sigmas[k+1]) * SmootherGain.transpose())*Jk.transpose();
             assurePositiveDefinite(smoothed_sigmas[k]);
         }
