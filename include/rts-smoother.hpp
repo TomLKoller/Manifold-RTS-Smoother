@@ -33,12 +33,12 @@ namespace adekf
         RTS_Smoother(const State &_mu, const Covariance &_sigma) : ADEKF<State>(_mu, _sigma)
         {
             storeEstimation();
-            storePredictedEstimation();
+            storePredictedEstimation();//called only to have something in 0. Is never used.
         }
         RTS_Smoother(const ADEKF<State> &filter) : ADEKF<State>(filter)
         {
             storeEstimation();
-            storePredictedEstimation();
+            storePredictedEstimation();//called only to have something in 0. Is never used.
         }
         /**
          * Stores the current mean and covariance of the filter 
@@ -92,17 +92,10 @@ namespace adekf
             auto F=extractJacobi(result);
             return eval(F.template rightCols<NoiseDim>() * Q * F.template rightCols<NoiseDim>().transpose());
         }
-        //Taken from https://gist.github.com/gokhansolak/d2abaefcf3e3b767f5bc7d81cfe0b36a
-        template <typename _Matrix_Type_>
-        _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon = std::numeric_limits<double>::epsilon())
-        {
-            Eigen::JacobiSVD<_Matrix_Type_> svd(a, Eigen::ComputeThinU | Eigen::ComputeThinV);
-            double tolerance = epsilon * std::max(a.cols(), a.rows()) * svd.singularValues().array().abs()(0);
-            return svd.matrixV() * (svd.singularValues().array().abs() > tolerance).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().adjoint();
-        }
-
+       
         
 
+static inline size_t indefinite_counter=0;
         template <int NoiseDim, typename DynamicModel, typename... Controls>
         void smoothSingleStep(size_t k, DynamicModel &dynamicModel, const Eigen::Matrix<double,NoiseDim,NoiseDim> &Q, const std::tuple<Controls...> &controls, const State &smoothed_mu_kplus, const Covariance &smoothed_sigma_kplus)
         {
@@ -120,11 +113,12 @@ namespace adekf
           
             Covariance Jk=transformReferenceJacobian(old_mus[k],smoothed_mus[k],smoother_innovation);
            
-
             Covariance Bk=transformReferenceJacobian(smoothed_mu_kplus,predicted_mus[k+1]); 
             smoothed_sigmas[k] = Jk * (old_sigmas[k] + SmootherGain * (Bk*smoothed_sigma_kplus*Bk.transpose()-predicted_sigmas[k+1]) * SmootherGain.transpose())*Jk.transpose();
+            if(!isPositiveDefinite(smoothed_sigmas[k]))
+                indefinite_counter++;
             assurePositiveDefinite(smoothed_sigmas[k]);
-        }
+            }
 
         template <int NoiseDim, typename DynamicModel, typename... Controls>
         void smoothIntervalWithNonAdditiveNoise(size_t steps, int start, DynamicModel &dynamicModel, const Eigen::Matrix<double,NoiseDim,NoiseDim> &Q, const std::vector<std::tuple<Controls...>> &all_controls)

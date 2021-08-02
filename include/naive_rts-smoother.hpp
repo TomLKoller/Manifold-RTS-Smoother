@@ -89,15 +89,9 @@ namespace adekf
             }
             return eval(F.template rightCols<NoiseDim>() * Q * F.template rightCols<NoiseDim>().transpose());
         }
-    //Taken from https://gist.github.com/gokhansolak/d2abaefcf3e3b767f5bc7d81cfe0b36a
-    template<typename _Matrix_Type_>
-    _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon = std::numeric_limits<double>::epsilon())
-    {
-	Eigen::JacobiSVD< _Matrix_Type_ > svd(a ,Eigen::ComputeThinU | Eigen::ComputeThinV);
-	double tolerance = epsilon * std::max(a.cols(), a.rows()) *svd.singularValues().array().abs()(0);
-	return svd.matrixV() *  (svd.singularValues().array().abs() > tolerance).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().adjoint();
-    }
 
+
+static inline size_t indefinite_counter=0;
         template <int NoiseDim, typename DynamicModel, typename... Controls>
         void smoothSingleStep(size_t k, DynamicModel & dynamicModel, const Eigen::Matrix<double,NoiseDim,NoiseDim> &Q,const std::tuple<Controls ...> & controls,const State & smoothed_mu_kplus,const Covariance & smoothed_sigma_kplus){
                 MatrixType<ScalarType,DOF, DOF> Fk(DOF, DOF);
@@ -119,6 +113,8 @@ namespace adekf
                 SmootherGain = old_sigmas[k] * Fk.transpose() * (predicted_sigmas[k+1].inverse());
                 smoothed_mus[k] = old_mus[k] + (SmootherGain * (smoothed_mu_kplus- predicted_mus[k+1]));
                 smoothed_sigmas[k] = (old_sigmas[k] + SmootherGain *(smoothed_sigma_kplus- predicted_sigmas[k+1]) * SmootherGain.transpose());
+                if(!isPositiveDefinite(smoothed_sigmas[k]))
+                indefinite_counter++;
                 assurePositiveDefinite(smoothed_sigmas[k]);
         }
 
